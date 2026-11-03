@@ -173,38 +173,8 @@ def markdown(items, errors):
     print("Collected", len(items), "matching jobs; warnings:", len(errors))
     return len(ranked)
 
-def export_resume_matcher_jobs(items):
-    """Export public job descriptions for user-approved local resume tailoring.
-
-    Never include the applicant's resume, personal details, or API keys.
-    """
-    ranked = sorted(items.values(), key=lambda job: -job["score"])[:45]
-    jobs = []
-    for job in ranked:
-        description = clean(job.get("description", ""))
-        if description.lower() in ("nan", "none", "null"):
-            description = ""
-        jobs.append({
-            "title": clean(job.get("title", "")),
-            "company": clean(job.get("company", "")),
-            "location": clean(job.get("location", "")),
-            "source": clean(job.get("source", "")),
-            "url": clean(job.get("url", "")),
-            "score": job.get("score", 0),
-            "description": description[:16000] if len(description) >= 120 else "",
-        })
-    (ROOT / "resume_matcher_jobs.json").write_text(
-        json.dumps({"format": "marketing-job-finder/v1", "jobs": jobs},
-                   ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print("Resume Matcher export:", sum(bool(j["description"]) for j in jobs),
-          "jobs with usable descriptions out of", len(jobs))
-
-
 if __name__ == "__main__":
     found, warnings = {}, []
     collect_jobspy(found, warnings)
     collect_remotive(found, warnings)
     markdown(found, warnings)
-    export_resume_matcher_jobs(found)

@@ -28,5 +28,4 @@ jobs:
           path: |
             job_finder/latest.csv
             job_finder/latest.md
-            job_finder/resume_matcher_jobs.json
           retention-days: 30
