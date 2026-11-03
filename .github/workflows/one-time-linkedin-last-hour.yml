@@ -1,0 +1,99 @@
+name: One-time LinkedIn NYC jobs - last hour
+on:
+  push:
+    branches:
+      - 'one-off/linkedin-last-hour-2026-11-03'
+jobs:
+  linkedin_last_hour:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install scraper
+        run: pip install python-jobspy
+      - name: Search LinkedIn last hour
+        shell: bash
+        run: |
+          python - <<'PY'
+          from jobspy import scrape_jobs
+          from pathlib import Path
+          import csv, time, urllib.parse
+          
+          terms = [
+              "social media specialist",
+              "social media manager",
+              "content marketing specialist",
+              "digital marketing specialist",
+              "social media coordinator",
+              "content creator",
+              "growth marketing",
+              "marketing coordinator",
+          ]
+          out = {}
+          problems = []
+          for term in terms:
+              try:
+                  df = scrape_jobs(site_name=["linkedin"], search_term=term,
+                                   location="New York, NY", results_wanted=15,
+                                   hours_old=1, country_indeed="USA")
+                  print(f"Search {term!r}: {len(df)} rows", flush=True)
+                  for r in df.to_dict("records"):
+                      raw_url = str(r.get("job_url") or "").strip()
+                      if not raw_url or raw_url == "nan":
+                          continue
+                      url = raw_url.split("?")[0]
+                      key = url or f"{r.get('title')}|{r.get('company')}"
+                      if key in out:
+                          continue
+                      out[key] = {
+                          "title": str(r.get("title") or ""),
+                          "company": str(r.get("company") or ""),
+                          "location": str(r.get("location") or ""),
+                          "date_posted": str(r.get("date_posted") or ""),
+                          "job_url": raw_url,
+                          "search_term": term,
+                      }
+              except Exception as exc:
+                  msg = f"{term}: {type(exc).__name__}: {exc}"
+                  problems.append(msg)
+                  print("SEARCH ERROR", msg, flush=True)
+              time.sleep(2)
+          records = list(out.values())
+          root = Path("linkedin_last_hour")
+          root.mkdir(exist_ok=True)
+          headers = ["title","company","location","date_posted","job_url","search_term"]
+          with (root/"jobs.csv").open("w", newline="", encoding="utf-8") as f:
+              w = csv.DictWriter(f, fieldnames=headers)
+              w.writeheader()
+              w.writerows(records)
+          lines = [
+              "# One-time LinkedIn NYC marketing jobs — last hour",
+              "",
+              "Requested posting-age filter: 1 hour (LinkedIn/JobSpy).",
+              "Actual posting age is not individually verified; platform filters can be imprecise.",
+              "",
+              f"Found {len(records)} unique jobs across {len(terms)} searches.",
+              "",
+          ]
+          for i,r in enumerate(records,1):
+              lines.append(f"{i}. [{r['title']} — {r['company']}]({r['job_url']}) — {r['location']} — posted metadata {r['date_posted']}")
+          if problems:
+              lines += ["","## Search errors"] + [f"- {x}" for x in problems]
+          (root/"jobs.md").write_text("\n".join(lines)+"\n", encoding="utf-8")
+          print(f"FINAL: {len(records)} unique jobs (requested last-hour filter)", flush=True)
+          for i,r in enumerate(records[:60],1):
+              print(f"RESULT {i}: {r['title']} | {r['company']} | {r['location']} | {r['job_url']}", flush=True)
+          if problems:
+              print(f"ERROR_COUNT: {len(problems)}",flush=True)
+          
+          PY
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linkedin-last-hour-nyc
+          path: linkedin_last_hour/
+          retention-days: 7
