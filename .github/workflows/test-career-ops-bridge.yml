@@ -1,0 +1,18 @@
+name: Test Career Ops bridge
+on:
+  push:
+    branches:
+      - feature/career-ops-safe-bridge
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test importer preview, deduplication, and backups
+        run: python -m unittest discover -s job_finder -p 'test_career_ops_bridge.py' -v
