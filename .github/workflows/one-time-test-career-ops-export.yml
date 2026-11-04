@@ -1,0 +1,35 @@
+name: One-time integrated Career Ops job report
+on:
+  push:
+    branches:
+      - 'one-off/test-career-ops-export-2026-11-04'
+permissions:
+  contents: read
+jobs:
+  search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install search dependencies
+        run: pip install -r job_finder/requirements.txt
+      - name: Find marketing jobs
+        working-directory: job_finder
+        run: python search.py
+      - name: Export Career Ops compatible shortlist
+        working-directory: job_finder
+        run: python career_ops_bridge.py --limit 15
+      - name: Display shortlist
+        run: cat job_finder/career_ops_candidates.md
+      - name: Downloadable reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketing-jobs-with-career-ops
+          path: |
+            job_finder/latest.csv
+            job_finder/latest.md
+            job_finder/career_ops_candidates.md
+          retention-days: 7
