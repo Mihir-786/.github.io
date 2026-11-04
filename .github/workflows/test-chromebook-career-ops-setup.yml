@@ -1,0 +1,19 @@
+name: Validate Chromebook Career Ops setup script
+on:
+  push:
+    branches:
+      - feature/chromebook-career-ops-setup
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify shell syntax
+        run: bash -n job_finder/setup_chromebook_career_ops.sh
+      - name: Check for unexpected privileged steps
+        run: |
+          grep -Fq 'sudo apt-get install' job_finder/setup_chromebook_career_ops.sh
+          grep -Fq 'npx --yes @santifer/career-ops init' job_finder/setup_chromebook_career_ops.sh
+          grep -Fq 'exec codex' job_finder/setup_chromebook_career_ops.sh
