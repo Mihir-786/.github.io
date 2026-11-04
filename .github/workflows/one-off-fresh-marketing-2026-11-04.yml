@@ -1,0 +1,32 @@
+name: One-time fresh marketing list - November 4
+on:
+  push:
+    branches:
+      - 'one-off/fresh-marketing-list-2026-11-04'
+permissions:
+  contents: read
+jobs:
+  search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r job_finder/requirements.txt
+      - name: Fresh marketing jobs search
+        working-directory: job_finder
+        run: python search.py
+      - name: Print full report to logs
+        run: cat job_finder/latest.md
+      - name: Upload fresh results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: marketing-jobs-fresh-nov-4
+          path: |
+            job_finder/latest.csv
+            job_finder/latest.md
+          retention-days: 14
