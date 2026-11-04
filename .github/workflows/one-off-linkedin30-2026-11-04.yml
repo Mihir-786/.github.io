@@ -1,0 +1,105 @@
+name: One-time LinkedIn NYC jobs - 30 minutes
+on:
+  push:
+    branches:
+      - 'one-off/linkedin30-2026-11-04'
+permissions:
+  contents: read
+jobs:
+  scrape:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Search LinkedIn guest endpoint - 30-minute filter
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          from urllib.parse import quote
+          import urllib.request, re, html, csv, time, json, random
+          terms = [
+              "social media specialist",
+              "social media manager",
+              "content creator",
+              "content marketing specialist",
+              "digital marketing specialist",
+              "marketing coordinator",
+              "growth marketing",
+              "influencer marketing"
+          ]
+          root = Path("linkedin_30m")
+          root.mkdir(exist_ok=True)
+          found = {}
+          errors = []
+          now = datetime.now(timezone.utc)
+          for term in terms:
+              url = ("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+                     f"?keywords={quote(term)}&location=New%20York%2C%20NY&f_TPR=r1800&sortBy=DD&start=0")
+              req = urllib.request.Request(url, headers={
+                 "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+                 "Accept-Language": "en-US,en;q=0.9",
+                 "Accept": "text/html,application/xhtml+xml,*/*"
+              })
+              try:
+                  with urllib.request.urlopen(req, timeout=18) as response:
+                      body = response.read().decode("utf-8", errors="replace")
+                  cards = re.split(r"<li[^>]*>", body)[1:]
+                  matched = 0
+                  for card in cards:
+                      urn = re.search(r'data-entity-urn="urn:li:jobPosting:(\d+)"',card)
+                      if not urn: continue
+                      ident = urn.group(1)
+                      title = re.search(r'base-search-card__title[^>]*>\s*([^<]+)',card)
+                      comp = re.search(r'base-search-card__subtitle[^>]*>.*?<a[^>]*>\s*([^<]+)\s*</a>',card,re.S) or re.search(r'base-search-card__subtitle[^>]*>\s*([^<]+)',card)
+                      loc = re.search(r'job-search-card__location[^>]*>\s*([^<]+)',card)
+                      date = re.search(r'<time[^>]*datetime="([^"]+)"[^>]*>(.*?)</time>',card,re.S)
+                      def norm(m):
+                          return re.sub(r"\s+"," ",html.unescape(m.group(1))).strip() if m else ""
+                      title, company, location = norm(title), norm(comp), norm(loc)
+                      if not title: continue
+                      seen = re.sub("<[^>]+>"," ",date.group(2)).strip() if date else ""
+                      # The r1800 filter requests the last 30 minutes, but LinkedIn can
+                      # include older/reposted jobs and date labels are not minute-precise.
+                      # Do not claim individually verified ages.
+                      if ident not in found:
+                          found[ident] = dict(title=title, company=company, location=location,
+                              posted_label=seen, posted_date=(date.group(1) if date else ""),
+                              url=f"https://www.linkedin.com/jobs/view/{ident}",
+                              search_term=term)
+                          matched+=1
+                  print(f"SEARCH {term}: {len(cards)} cards; {matched} new unique",flush=True)
+              except Exception as e:
+                  msg=f"{term}: {type(e).__name__}: {str(e)[:130]}"
+                  errors.append(msg)
+                  print("SEARCH_ERROR",msg,flush=True)
+              time.sleep(1.1 + random.random())
+          rows=list(found.values())
+          cols=["title","company","location","posted_label","posted_date","url","search_term"]
+          with (root/"jobs.csv").open("w",newline="",encoding="utf-8") as f:
+              w=csv.DictWriter(f,fieldnames=cols);w.writeheader();w.writerows(rows)
+          with (root/"jobs.md").open("w",encoding="utf-8") as f:
+              f.write("# LinkedIn NYC jobs — requested past 30 minutes\n\n")
+              f.write(f"Checked: {now.strftime('%Y-%m-%d %H:%M UTC')}. Results: {len(rows)}.\n\n")
+              f.write("LinkedIn search used f_TPR=r1800. Individual posting times are not independently verified. Check the posting age and activity on LinkedIn.\n\n")
+              for i,r in enumerate(rows,1):
+                  f.write(f"{i}. [{r['title']} — {r['company']}]({r['url']}) — {r['location']} — displayed age: {r['posted_label'] or 'unavailable'}\n")
+              if errors:
+                  f.write("\nSearch errors:\n")
+                  for x in errors: f.write(f"- {x}\n")
+          print(f"FINAL_COUNT {len(rows)}",flush=True)
+          print(f"ERROR_COUNT {len(errors)}",flush=True)
+          for i,r in enumerate(rows[:65],1):
+              print("JOB",i,json.dumps(r,ensure_ascii=False),flush=True)
+          
+          PY
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkedin-nyc-30-minute-jobs
+          path: linkedin_30m/
+          retention-days: 7
